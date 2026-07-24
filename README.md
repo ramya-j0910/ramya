@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vestique
+
+A fashion/dress e-commerce MVP built with Next.js 14, Supabase, and Tailwind CSS.
 
 ## Getting Started
 
-First, run the development server:
-
+### 1. Clone and install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set up Supabase
+1. Create a free project at [supabase.com](https://supabase.com)
+2. In **SQL Editor**, run the contents of `supabase/schema.sql`
+3. In **Storage**, create a public bucket named `product-images`
+4. In **Authentication → Providers**, enable Google OAuth (optional)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Configure environment variables
+Fill in `.env.local` with your Supabase credentials:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Run locally
+```bash
+npm run dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Pages
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Route | Description |
+|---|---|
+| `/` | Product catalog with search & category filter |
+| `/login` | Sign in (email/password + Google OAuth) |
+| `/signup` | Create account (customer or designer) |
+| `/product/[id]` | Product detail + recommendations |
+| `/wishlist` | User's saved items |
+| `/cart` | Cart with quantity controls + Place Order |
+| `/orders` | Order history with status |
+| `/designer/upload` | Upload product (designer role only) |
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Roles
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Customer** — Browse, wishlist, add to cart, place orders
+- **Designer** — All customer features + upload products to the catalog
+
+---
+
+## Deploy to Vercel
+
+1. Push this repo to GitHub
+2. Import at [vercel.com/new](https://vercel.com/new)
+3. Add env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Deploy — Vercel auto-detects Next.js
+
+---
+
+## Tech Stack
+
+- **Next.js 14** (App Router, TypeScript)
+- **Tailwind CSS**
+- **Supabase** (Auth, Postgres, Storage)
+- **lucide-react** (icons)

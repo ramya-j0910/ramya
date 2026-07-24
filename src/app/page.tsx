@@ -1,101 +1,138 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '@/lib/auth-context'
+import { Product } from '@/lib/supabase'
+import ProductCard from '@/components/ProductCard'
+import { Search, SlidersHorizontal } from 'lucide-react'
+
+const CATEGORIES = ['All', 'Sarees', 'Kurtas', 'Lehengas', 'Gowns', 'Dresses', 'Tops', 'Co-ords', 'Other']
+
+export default function HomePage() {
+  const { user } = useAuth()
+  const [products, setProducts] = useState<Product[]>([])
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('All')
+  const [loading, setLoading] = useState(true)
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    if (category !== 'All') params.set('category', category)
+    const res = await fetch(`/api/products?${params}`)
+    const data = await res.json()
+    setProducts(Array.isArray(data) ? data : [])
+    setLoading(false)
+  }, [search, category])
+
+  const fetchWishlist = useCallback(async () => {
+    if (!user) return
+    const res = await fetch('/api/wishlist')
+    const data = await res.json()
+    if (Array.isArray(data)) {
+      setWishlistIds(new Set(data.map((w: { product_id: string }) => w.product_id)))
+    }
+  }, [user])
+
+  useEffect(() => { fetchProducts() }, [fetchProducts])
+  useEffect(() => { fetchWishlist() }, [fetchWishlist])
+
+  async function handleWishlist(productId: string) {
+    if (!user) { window.location.href = '/login'; return }
+    if (wishlistIds.has(productId)) {
+      await fetch(`/api/wishlist?product_id=${productId}`, { method: 'DELETE' })
+      setWishlistIds(prev => { const s = new Set(prev); s.delete(productId); return s })
+    } else {
+      await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId }),
+      })
+      setWishlistIds(prev => new Set(Array.from(prev).concat(productId)))
+    }
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div>
+      {/* Hero */}
+      <div className="bg-violet-50 rounded-2xl p-8 md:p-12 mb-10 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold text-violet-800 mb-3">
+          Fashion that tells your story
+        </h1>
+        <p className="text-gray-600 text-lg max-w-xl mx-auto">
+          Discover curated designs from independent designers.
+        </p>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-8">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search dresses, sarees, kurtis…"
+            className="input pl-9"
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <div className="relative">
+          <SlidersHorizontal size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            className="input pl-9 pr-10 appearance-none cursor-pointer min-w-[160px]"
+          >
+            {CATEGORIES.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Category pills */}
+      <div className="flex gap-2 flex-wrap mb-8">
+        {CATEGORIES.map(c => (
+          <button
+            key={c}
+            onClick={() => setCategory(c)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              category === c
+                ? 'bg-violet-600 text-white border-violet-600'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-xl bg-gray-100 animate-pulse aspect-[3/4]" />
+          ))}
+        </div>
+      ) : products.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <p className="text-xl font-medium">No products found</p>
+          <p className="text-sm mt-2">Try adjusting your search or filters</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {products.map(product => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              wishlisted={wishlistIds.has(product.id)}
+              onWishlist={handleWishlist}
+            />
+          ))}
+        </div>
+      )}
     </div>
-  );
+  )
 }
