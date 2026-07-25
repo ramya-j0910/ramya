@@ -64,7 +64,9 @@ create table if not exists wishlist (
 alter table wishlist enable row level security;
 
 create policy "Users manage own wishlist"
-  on wishlist for all using (auth.uid() = user_id);
+  on wishlist for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- ── Cart Items ──────────────────────────────────────────────
 create table if not exists cart_items (
@@ -77,7 +79,9 @@ create table if not exists cart_items (
 alter table cart_items enable row level security;
 
 create policy "Users manage own cart"
-  on cart_items for all using (auth.uid() = user_id);
+  on cart_items for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- ── Orders ──────────────────────────────────────────────────
 create table if not exists orders (
@@ -91,7 +95,9 @@ create table if not exists orders (
 alter table orders enable row level security;
 
 create policy "Users manage own orders"
-  on orders for all using (auth.uid() = user_id);
+  on orders for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- ── Order Items ─────────────────────────────────────────────
 create table if not exists order_items (
@@ -104,17 +110,10 @@ create table if not exists order_items (
 
 alter table order_items enable row level security;
 
-create policy "Users view own order items"
-  on order_items for select
-  using (
-    exists (select 1 from orders where orders.id = order_id and orders.user_id = auth.uid())
-  );
-
-create policy "Users insert own order items"
-  on order_items for insert
-  with check (
-    exists (select 1 from orders where orders.id = order_id and orders.user_id = auth.uid())
-  );
+create policy "Users manage own order items"
+  on order_items for all
+  using (exists (select 1 from orders where orders.id = order_id and orders.user_id = auth.uid()))
+  with check (exists (select 1 from orders where orders.id = order_id and orders.user_id = auth.uid()));
 
 -- ── Storage: product-images bucket ─────────────────────────
 -- Run these after creating the bucket in the dashboard or via API:
