@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import { Product } from '@/lib/supabase'
@@ -15,14 +14,13 @@ export default function ProductCard({ product, wishlisted, onWishlist }: Product
   return (
     <div className="card group">
       <Link href={`/product/${product.id}`}>
-        <div className="relative aspect-[3/4] bg-gray-100">
+        <div className="relative aspect-[3/4] bg-gray-100 overflow-hidden">
           {product.image_url ? (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={product.image_url}
               alt={product.name}
-              fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300 text-sm">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { Product } from '@/lib/supabase'
+import { authedFetch, Product } from '@/lib/supabase'
 import ProductCard from '@/components/ProductCard'
 import { Search, SlidersHorizontal } from 'lucide-react'
 
@@ -29,7 +29,7 @@ export default function HomePage() {
 
   const fetchWishlist = useCallback(async () => {
     if (!user) return
-    const res = await fetch('/api/wishlist')
+    const res = await authedFetch('/api/wishlist')
     const data = await res.json()
     if (Array.isArray(data)) {
       setWishlistIds(new Set(data.map((w: { product_id: string }) => w.product_id)))
@@ -42,10 +42,10 @@ export default function HomePage() {
   async function handleWishlist(productId: string) {
     if (!user) { window.location.href = '/login'; return }
     if (wishlistIds.has(productId)) {
-      await fetch(`/api/wishlist?product_id=${productId}`, { method: 'DELETE' })
+      await authedFetch(`/api/wishlist?product_id=${productId}`, { method: 'DELETE' })
       setWishlistIds(prev => { const s = new Set(prev); s.delete(productId); return s })
     } else {
-      await fetch('/api/wishlist', {
+      await authedFetch('/api/wishlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: productId }),
