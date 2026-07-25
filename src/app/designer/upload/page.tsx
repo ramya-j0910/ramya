@@ -60,9 +60,19 @@ export default function DesignerUploadPage() {
       image_url = urlData.publicUrl
     }
 
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setError('Your session has expired. Please sign in again.')
+      setSubmitting(false)
+      return
+    }
+
     const res = await fetch('/api/products', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({ name, description, price: parseFloat(price), category, image_url }),
     })
 

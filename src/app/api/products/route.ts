@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
+
+function makeClient(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  )
+}
 
 // GET /api/products?search=&category=
 export async function GET(request: NextRequest) {
@@ -7,7 +15,11 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') ?? ''
   const category = searchParams.get('category') ?? ''
 
-  const supabase = createSupabaseServerClient()
+  // GET is public — no auth needed, use service client
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   let query = supabase
     .from('products')
     .select('*')
@@ -23,18 +35,20 @@ export async function GET(request: NextRequest) {
 
 // POST /api/products (designer only)
 export async function POST(request: NextRequest) {
-  const supabase = createSupabaseServerClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  // Read token from Authorization header (sent by the client)
+  const authHeader = request.headers.get('Authorization') ?? ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
 
-  // --- TEMPORARY DEBUG ---
-  const cookieHeader = request.headers.get('cookie') ?? ''
-  const cookieNames = cookieHeader.split(';').map(c => c.trim().split('=')[0]).filter(Boolean)
-  console.log('[POST /api/products] cookie names:', cookieNames)
-  console.log('[POST /api/products] user:', user?.id ?? null)
-  console.log('[POST /api/products] authError:', authError?.message ?? null)
-  // --- END DEBUG ---
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  if (!user) return NextResponse.json({ error: 'Unauthorized', debug: { cookieNames, authError: authError?.message } }, { status: 401 })
+  const supabase = makeClient(token)
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
