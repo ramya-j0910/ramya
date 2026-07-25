@@ -71,11 +71,13 @@ export default function ProductDetailPage() {
     if (!user) { router.push('/login'); return }
     setWishLoading(true)
     if (wishlisted) {
-      await supabase.from('wishlist').delete().eq('user_id', user.id).eq('product_id', product!.id)
+      const { error } = await supabase.from('wishlist').delete().eq('user_id', user.id).eq('product_id', product!.id)
+      if (error) { alert('Wishlist remove error: ' + error.message + ' | code: ' + error.code); setWishLoading(false); return }
       setWishlisted(false)
       showToast('Removed from wishlist')
     } else {
-      await supabase.from('wishlist').insert({ user_id: user.id, product_id: product!.id })
+      const { error } = await supabase.from('wishlist').insert({ user_id: user.id, product_id: product!.id })
+      if (error) { alert('Wishlist add error: ' + error.message + ' | code: ' + error.code); setWishLoading(false); return }
       setWishlisted(true)
       showToast('Added to wishlist ♥')
     }
@@ -92,9 +94,11 @@ export default function ProductDetailPage() {
       .eq('product_id', product!.id)
       .single()
     if (existing) {
-      await supabase.from('cart_items').update({ quantity: existing.quantity + 1 }).eq('user_id', user.id).eq('product_id', product!.id)
+      const { error } = await supabase.from('cart_items').update({ quantity: existing.quantity + 1 }).eq('user_id', user.id).eq('product_id', product!.id)
+      if (error) { alert('Cart update error: ' + error.message + ' | code: ' + error.code); setCartLoading(false); return }
     } else {
-      await supabase.from('cart_items').insert({ user_id: user.id, product_id: product!.id, quantity: 1 })
+      const { error } = await supabase.from('cart_items').insert({ user_id: user.id, product_id: product!.id, quantity: 1 })
+      if (error) { alert('Cart insert error: ' + error.message + ' | code: ' + error.code); setCartLoading(false); return }
     }
     setInCart(true)
     showToast('Added to cart 🛍️')
