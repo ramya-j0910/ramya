@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Heart, Trash2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { authedFetch, WishlistItem } from '@/lib/supabase'
+import { supabase, WishlistItem } from '@/lib/supabase'
 
 export default function WishlistPage() {
   const { user, loading: authLoading } = useAuth()
@@ -16,23 +16,40 @@ export default function WishlistPage() {
   useEffect(() => {
     if (authLoading) return
     if (!user) { router.push('/login'); return }
-
-    authedFetch('/api/wishlist')
-      .then(r => r.json())
-      .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false) })
+    async function load() {
+      const { data } = await supabase
+        .from('wishlist')
+        .select('*, products(*)')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false })
+      setItems((data as WishlistItem[]) ?? [])
+      setLoading(false)
+    }
+    load()
   }, [user, authLoading, router])
 
   async function removeItem(productId: string) {
-    await authedFetch(`/api/wishlist?product_id=${productId}`, { method: 'DELETE' })
+    await supabase.from('wishlist').delete().eq('user_id', user!.id).eq('product_id', productId)
     setItems(prev => prev.filter(i => i.product_id !== productId))
   }
 
   async function addToCart(productId: string) {
-    await authedFetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId }),
-    })
+    const { data: existing } = await supabase
+      .from('cart_items')
+      .select('quantity')
+      .eq('user_id', user!.id)
+      .eq('product_id', productId)
+      .single()
+
+    if (existing) {
+      await supabase
+        .from('cart_items')
+        .update({ quantity: existing.quantity + 1 })
+        .eq('user_id', user!.id)
+        .eq('product_id', productId)
+    } else {
+      await supabase.from('cart_items').insert({ user_id: user!.id, product_id: productId, quantity: 1 })
+    }
     router.push('/cart')
   }
 
@@ -61,7 +78,7 @@ export default function WishlistPage() {
             return (
               <div key={item.product_id} className="card">
                 <Link href={`/product/${p.id}`}>
-                  <div className="relative aspect-[3/4] bg-gray-100">
+                  <div className="relative aspect-[3/4] bg-gray-100 overflow-hidden">
                     {p.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
@@ -76,10 +93,7 @@ export default function WishlistPage() {
                   </Link>
                   <p className="font-bold text-violet-700 mt-1">₹{p.price.toLocaleString('en-IN')}</p>
                   <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => addToCart(p.id)}
-                      className="btn-primary text-xs flex-1 py-2"
-                    >
+                    <button onClick={() => addToCart(p.id)} className="btn-primary text-xs flex-1 py-2">
                       Add to Cart
                     </button>
                     <button

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Heart, ShoppingBag, ArrowLeft } from 'lucide-react'
-import { supabase, authedFetch, Product } from '@/lib/supabase'
+import { supabase, Product } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import ProductCard from '@/components/ProductCard'
 
@@ -71,15 +71,11 @@ export default function ProductDetailPage() {
     if (!user) { router.push('/login'); return }
     setWishLoading(true)
     if (wishlisted) {
-      await authedFetch(`/api/wishlist?product_id=${product!.id}`, { method: 'DELETE' })
+      await supabase.from('wishlist').delete().eq('user_id', user.id).eq('product_id', product!.id)
       setWishlisted(false)
       showToast('Removed from wishlist')
     } else {
-      await authedFetch('/api/wishlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product!.id }),
-      })
+      await supabase.from('wishlist').insert({ user_id: user.id, product_id: product!.id })
       setWishlisted(true)
       showToast('Added to wishlist ♥')
     }
@@ -89,11 +85,17 @@ export default function ProductDetailPage() {
   async function handleAddToCart() {
     if (!user) { router.push('/login'); return }
     setCartLoading(true)
-    await authedFetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product!.id, quantity: 1 }),
-    })
+    const { data: existing } = await supabase
+      .from('cart_items')
+      .select('quantity')
+      .eq('user_id', user.id)
+      .eq('product_id', product!.id)
+      .single()
+    if (existing) {
+      await supabase.from('cart_items').update({ quantity: existing.quantity + 1 }).eq('user_id', user.id).eq('product_id', product!.id)
+    } else {
+      await supabase.from('cart_items').insert({ user_id: user.id, product_id: product!.id, quantity: 1 })
+    }
     setInCart(true)
     showToast('Added to cart 🛍️')
     setCartLoading(false)

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ShoppingBag, Trash2, Minus, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { authedFetch, CartItem } from '@/lib/supabase'
+import { supabase, CartItem } from '@/lib/supabase'
 
 export default function CartPage() {
   const { user, loading: authLoading } = useAuth()
@@ -18,45 +18,69 @@ export default function CartPage() {
   useEffect(() => {
     if (authLoading) return
     if (!user) { router.push('/login'); return }
-
-    authedFetch('/api/cart')
-      .then(r => r.json())
-      .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false) })
+    async function load() {
+      const { data } = await supabase
+        .from('cart_items')
+        .select('*, products(*)')
+        .eq('user_id', user!.id)
+      setItems((data as CartItem[]) ?? [])
+      setLoading(false)
+    }
+    load()
   }, [user, authLoading, router])
 
   async function updateQty(productId: string, delta: number) {
     const item = items.find(i => i.product_id === productId)
     if (!item) return
     const newQty = item.quantity + delta
-    if (newQty < 1) {
-      await removeItem(productId)
-      return
-    }
-    await authedFetch('/api/cart', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId, quantity: newQty }),
-    })
+    if (newQty < 1) { await removeItem(productId); return }
+    await supabase
+      .from('cart_items')
+      .update({ quantity: newQty })
+      .eq('user_id', user!.id)
+      .eq('product_id', productId)
     setItems(prev => prev.map(i => i.product_id === productId ? { ...i, quantity: newQty } : i))
   }
 
   async function removeItem(productId: string) {
-    await authedFetch(`/api/cart?product_id=${productId}`, { method: 'DELETE' })
+    await supabase.from('cart_items').delete().eq('user_id', user!.id).eq('product_id', productId)
     setItems(prev => prev.filter(i => i.product_id !== productId))
   }
 
   async function placeOrder() {
     setPlacing(true)
-    const res = await authedFetch('/api/orders', { method: 'POST' })
-    const data = await res.json()
-    setPlacing(false)
+    const total = items.reduce((sum, item) => sum + (item.products?.price ?? 0) * item.quantity, 0)
 
-    if (res.ok) {
-      setItems([])
-      setOrderSuccess(data.id)
-    } else {
-      alert(data.error ?? 'Failed to place order')
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert({ user_id: user!.id, total, status: 'pending' })
+      .select()
+      .single()
+
+    if (orderError || !order) {
+      alert('Failed to place order: ' + orderError?.message)
+      setPlacing(false)
+      return
     }
+
+    const orderItems = items.map(item => ({
+      order_id: order.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      price: item.products?.price ?? 0,
+    }))
+
+    const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
+    if (itemsError) {
+      alert('Failed to save order items: ' + itemsError.message)
+      setPlacing(false)
+      return
+    }
+
+    await supabase.from('cart_items').delete().eq('user_id', user!.id)
+    setItems([])
+    setOrderSuccess(order.id)
+    setPlacing(false)
   }
 
   const total = items.reduce((sum, item) => sum + (item.products?.price ?? 0) * item.quantity, 0)
@@ -98,7 +122,6 @@ export default function CartPage() {
         </div>
       ) : (
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Items */}
           <div className="lg:col-span-2 space-y-4">
             {items.map(item => {
               const p = item.products!
@@ -141,7 +164,6 @@ export default function CartPage() {
             })}
           </div>
 
-          {/* Summary */}
           <div className="lg:col-span-1">
             <div className="bg-gray-50 rounded-2xl p-6 sticky top-24">
               <h3 className="font-bold text-lg text-gray-900 mb-4">Order Summary</h3>
@@ -157,11 +179,7 @@ export default function CartPage() {
                 <span>Total</span>
                 <span className="text-violet-700">₹{total.toLocaleString('en-IN')}</span>
               </div>
-              <button
-                onClick={placeOrder}
-                disabled={placing}
-                className="btn-primary w-full mt-6 text-base py-3"
-              >
+              <button onClick={placeOrder} disabled={placing} className="btn-primary w-full mt-6 text-base py-3">
                 {placing ? 'Placing Order…' : 'Place Order'}
               </button>
               <p className="text-xs text-center text-gray-400 mt-3">No payment required for this demo</p>

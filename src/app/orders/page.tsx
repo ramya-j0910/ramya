@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Package, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { authedFetch, Order } from '@/lib/supabase'
+import { supabase, Order } from '@/lib/supabase'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -23,10 +23,16 @@ export default function OrdersPage() {
   useEffect(() => {
     if (authLoading) return
     if (!user) { router.push('/login'); return }
-
-    authedFetch('/api/orders')
-      .then(r => r.json())
-      .then(data => { setOrders(Array.isArray(data) ? data : []); setLoading(false) })
+    async function load() {
+      const { data } = await supabase
+        .from('orders')
+        .select('*, order_items(*, products(*))')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false })
+      setOrders((data as Order[]) ?? [])
+      setLoading(false)
+    }
+    load()
   }, [user, authLoading, router])
 
   function toggleExpand(id: string) {
