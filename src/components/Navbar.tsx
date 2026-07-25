@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
-import { ShoppingBag, Heart, Package, Upload, LogIn, LogOut, User } from 'lucide-react'
+import { ShoppingBag, Heart, Package, Upload, LogIn, LogOut, User, LayoutDashboard } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Navbar() {
@@ -35,9 +35,14 @@ export default function Navbar() {
                   <Package size={16} /> Orders
                 </Link>
                 {profile?.role === 'designer' && (
-                  <Link href="/designer/upload" className="flex items-center gap-1 text-sm text-gray-600 hover:text-violet-600 transition-colors">
-                    <Upload size={16} /> Upload
-                  </Link>
+                  <>
+                    <Link href="/designer/dashboard" className="flex items-center gap-1 text-sm text-gray-600 hover:text-violet-600 transition-colors">
+                      <LayoutDashboard size={16} /> Dashboard
+                    </Link>
+                    <Link href="/designer/upload" className="flex items-center gap-1 text-sm text-gray-600 hover:text-violet-600 transition-colors">
+                      <Upload size={16} /> Upload
+                    </Link>
+                  </>
                 )}
                 <button
                   onClick={signOut}
@@ -81,7 +86,10 @@ export default function Navbar() {
               <Link href="/cart" onClick={() => setMenuOpen(false)} className="text-sm text-gray-700">Cart</Link>
               <Link href="/orders" onClick={() => setMenuOpen(false)} className="text-sm text-gray-700">Orders</Link>
               {profile?.role === 'designer' && (
-                <Link href="/designer/upload" onClick={() => setMenuOpen(false)} className="text-sm text-gray-700">Upload Product</Link>
+                <>
+                  <Link href="/designer/dashboard" onClick={() => setMenuOpen(false)} className="text-sm text-gray-700">Dashboard</Link>
+                  <Link href="/designer/upload" onClick={() => setMenuOpen(false)} className="text-sm text-gray-700">Upload Product</Link>
+                </>
               )}
               <button onClick={() => { signOut(); setMenuOpen(false) }} className="text-sm text-red-500 text-left">Sign out</button>
             </>

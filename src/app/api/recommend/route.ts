@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
 
-// GET /api/recommend?productId=&category=
+// GET /api/recommend?productId=&category= (public)
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get('productId')
@@ -9,7 +9,11 @@ export async function GET(request: NextRequest) {
 
   if (!category) return NextResponse.json([])
 
-  const supabase = createSupabaseServerClient()
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   let query = supabase
     .from('products')
     .select('*')
@@ -21,6 +25,5 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Return max 6
   return NextResponse.json((data ?? []).slice(0, 6))
 }
