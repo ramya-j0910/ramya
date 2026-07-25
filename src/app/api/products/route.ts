@@ -24,8 +24,17 @@ export async function GET(request: NextRequest) {
 // POST /api/products (designer only)
 export async function POST(request: NextRequest) {
   const supabase = createSupabaseServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  // --- TEMPORARY DEBUG ---
+  const cookieHeader = request.headers.get('cookie') ?? ''
+  const cookieNames = cookieHeader.split(';').map(c => c.trim().split('=')[0]).filter(Boolean)
+  console.log('[POST /api/products] cookie names:', cookieNames)
+  console.log('[POST /api/products] user:', user?.id ?? null)
+  console.log('[POST /api/products] authError:', authError?.message ?? null)
+  // --- END DEBUG ---
+
+  if (!user) return NextResponse.json({ error: 'Unauthorized', debug: { cookieNames, authError: authError?.message } }, { status: 401 })
 
   const { data: profile } = await supabase
     .from('profiles')
