@@ -30,13 +30,24 @@ export default function SignupPage() {
       return
     }
 
+    // If session is null, email confirmation is required — tell the user
+    if (!data.session) {
+      setError('Please check your email and confirm your account before signing in.')
+      setLoading(false)
+      return
+    }
+
     if (data.user) {
       const { error: profileError } = await supabase.from('profiles').insert({
         id: data.user.id,
         full_name: fullName,
         role,
       })
-      if (profileError) console.error('Profile creation error:', profileError)
+      if (profileError) {
+        setError(`Account created but profile setup failed: ${profileError.message}`)
+        setLoading(false)
+        return
+      }
     }
 
     setLoading(false)
