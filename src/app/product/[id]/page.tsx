@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { Heart, ShoppingBag, ArrowLeft } from 'lucide-react'
-import { supabase, Product } from '@/lib/supabase'
+import { supabase, authedFetch, Product } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import ProductCard from '@/components/ProductCard'
 
@@ -72,11 +71,11 @@ export default function ProductDetailPage() {
     if (!user) { router.push('/login'); return }
     setWishLoading(true)
     if (wishlisted) {
-      await fetch(`/api/wishlist?product_id=${product!.id}`, { method: 'DELETE' })
+      await authedFetch(`/api/wishlist?product_id=${product!.id}`, { method: 'DELETE' })
       setWishlisted(false)
       showToast('Removed from wishlist')
     } else {
-      await fetch('/api/wishlist', {
+      await authedFetch('/api/wishlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: product!.id }),
@@ -90,7 +89,7 @@ export default function ProductDetailPage() {
   async function handleAddToCart() {
     if (!user) { router.push('/login'); return }
     setCartLoading(true)
-    await fetch('/api/cart', {
+    await authedFetch('/api/cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_id: product!.id, quantity: 1 }),
@@ -139,7 +138,8 @@ export default function ProductDetailPage() {
         {/* Image */}
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gray-100">
           {product.image_url ? (
-            <Image src={product.image_url} alt={product.name} fill className="object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={product.image_url} alt={product.name} className="object-cover w-full h-full" />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300">No image</div>
           )}

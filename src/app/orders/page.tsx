@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Package, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { Order } from '@/lib/supabase'
+import { authedFetch, Order } from '@/lib/supabase'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -24,7 +24,7 @@ export default function OrdersPage() {
     if (authLoading) return
     if (!user) { router.push('/login'); return }
 
-    fetch('/api/orders')
+    authedFetch('/api/orders')
       .then(r => r.json())
       .then(data => { setOrders(Array.isArray(data) ? data : []); setLoading(false) })
   }, [user, authLoading, router])

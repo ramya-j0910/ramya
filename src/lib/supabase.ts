@@ -7,6 +7,18 @@ export const supabase = supabaseUrl
   ? createBrowserClient(supabaseUrl, supabaseAnonKey)
   : (null as unknown as ReturnType<typeof createBrowserClient>)
 
+/** Fetch wrapper that automatically attaches the Supabase Bearer token */
+export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return fetch(input, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+  })
+}
+
 export type Profile = {
   id: string
   full_name: string | null

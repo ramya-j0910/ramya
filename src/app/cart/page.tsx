@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
 import { ShoppingBag, Trash2, Minus, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { CartItem } from '@/lib/supabase'
+import { authedFetch, CartItem } from '@/lib/supabase'
 
 export default function CartPage() {
   const { user, loading: authLoading } = useAuth()
@@ -20,7 +19,7 @@ export default function CartPage() {
     if (authLoading) return
     if (!user) { router.push('/login'); return }
 
-    fetch('/api/cart')
+    authedFetch('/api/cart')
       .then(r => r.json())
       .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false) })
   }, [user, authLoading, router])
@@ -33,7 +32,7 @@ export default function CartPage() {
       await removeItem(productId)
       return
     }
-    await fetch('/api/cart', {
+    await authedFetch('/api/cart', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_id: productId, quantity: newQty }),
@@ -42,13 +41,13 @@ export default function CartPage() {
   }
 
   async function removeItem(productId: string) {
-    await fetch(`/api/cart?product_id=${productId}`, { method: 'DELETE' })
+    await authedFetch(`/api/cart?product_id=${productId}`, { method: 'DELETE' })
     setItems(prev => prev.filter(i => i.product_id !== productId))
   }
 
   async function placeOrder() {
     setPlacing(true)
-    const res = await fetch('/api/orders', { method: 'POST' })
+    const res = await authedFetch('/api/orders', { method: 'POST' })
     const data = await res.json()
     setPlacing(false)
 
@@ -108,7 +107,8 @@ export default function CartPage() {
                   <Link href={`/product/${p.id}`}>
                     <div className="relative w-24 h-32 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                       {p.image_url ? (
-                        <Image src={p.image_url} alt={p.name} fill className="object-cover" />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
                       ) : (
                         <div className="flex items-center justify-center h-full text-gray-300 text-xs">No img</div>
                       )}

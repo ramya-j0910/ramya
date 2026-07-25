@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
+
+function makeClient(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  )
+}
+
+function getToken(request: NextRequest) {
+  const h = request.headers.get('Authorization') ?? ''
+  return h.startsWith('Bearer ') ? h.slice(7) : null
+}
 
 // GET /api/cart
-export async function GET() {
-  const supabase = createSupabaseServerClient()
+export async function GET(request: NextRequest) {
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -18,13 +34,15 @@ export async function GET() {
 
 // POST /api/cart  { product_id, quantity? }
 export async function POST(request: NextRequest) {
-  const supabase = createSupabaseServerClient()
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { product_id, quantity = 1 } = await request.json()
 
-  // Upsert so clicking "Add to cart" twice increments quantity
   const { data: existing } = await supabase
     .from('cart_items')
     .select('quantity')
@@ -56,7 +74,10 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/cart  { product_id, quantity }
 export async function PUT(request: NextRequest) {
-  const supabase = createSupabaseServerClient()
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -77,7 +98,10 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/cart?product_id=
 export async function DELETE(request: NextRequest) {
-  const supabase = createSupabaseServerClient()
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

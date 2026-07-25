@@ -1,9 +1,25 @@
-import { NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+function makeClient(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  )
+}
+
+function getToken(request: NextRequest) {
+  const h = request.headers.get('Authorization') ?? ''
+  return h.startsWith('Bearer ') ? h.slice(7) : null
+}
 
 // GET /api/orders
-export async function GET() {
-  const supabase = createSupabaseServerClient()
+export async function GET(request: NextRequest) {
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -18,12 +34,14 @@ export async function GET() {
 }
 
 // POST /api/orders — creates order from cart, clears cart
-export async function POST() {
-  const supabase = createSupabaseServerClient()
+export async function POST(request: NextRequest) {
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Fetch cart
   const { data: cartItems, error: cartError } = await supabase
     .from('cart_items')
     .select('*, products(*)')
@@ -34,12 +52,10 @@ export async function POST() {
     return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
   }
 
-  // Compute total
   const total = cartItems.reduce((sum: number, item: { products: { price: number }, quantity: number }) => {
     return sum + item.products.price * item.quantity
   }, 0)
 
-  // Create order
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({ user_id: user.id, total, status: 'pending' })
@@ -48,7 +64,6 @@ export async function POST() {
 
   if (orderError) return NextResponse.json({ error: orderError.message }, { status: 500 })
 
-  // Create order_items
   const orderItems = cartItems.map((item: { product_id: string, quantity: number, products: { price: number } }) => ({
     order_id: order.id,
     product_id: item.product_id,
@@ -59,7 +74,6 @@ export async function POST() {
   const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
   if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
 
-  // Clear cart
   await supabase.from('cart_items').delete().eq('user_id', user.id)
 
   return NextResponse.json(order, { status: 201 })
