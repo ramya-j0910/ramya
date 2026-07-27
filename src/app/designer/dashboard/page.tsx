@@ -258,12 +258,17 @@ export default function DesignerDashboardPage() {
                           <select
                             value={order.status}
                             disabled={updatingOrder === order.id}
-                            onChange={e => updateStatus(order.id, e.target.value)}
+                            onChange={e => {
+                              const next = e.target.value
+                              if (next === 'cancelled' && !confirm('Cancel this order?')) return
+                              updateStatus(order.id, next)
+                            }}
                             className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white cursor-pointer"
                           >
                             <option value="pending">pending</option>
                             <option value="shipped">shipped</option>
                             <option value="delivered">delivered</option>
+                            <option value="cancelled">cancelled</option>
                           </select>
                         )}
                       </div>
