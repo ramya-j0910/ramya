@@ -78,3 +78,37 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json(order, { status: 201 })
 }
+
+// PATCH /api/orders  { order_id }  — customer cancels their own pending order
+export async function PATCH(request: NextRequest) {
+  const token = getToken(request)
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = makeClient(token)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { order_id } = await request.json()
+  if (!order_id) return NextResponse.json({ error: 'Missing order_id' }, { status: 400 })
+
+  // Verify the order belongs to this user and is still pending
+  const { data: order, error: fetchError } = await supabase
+    .from('orders')
+    .select('id, status, user_id')
+    .eq('id', order_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (fetchError || !order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  if (order.status !== 'pending') {
+    return NextResponse.json({ error: 'Only pending orders can be cancelled' }, { status: 400 })
+  }
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ status: 'cancelled' })
+    .eq('id', order_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}

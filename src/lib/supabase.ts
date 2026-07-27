@@ -34,6 +34,7 @@ export type Product = {
   category: string
   image_url: string | null
   designer_id: string | null
+  sold_out: boolean
   created_at: string
 }
 
@@ -54,7 +55,7 @@ export type WishlistItem = {
 export type Order = {
   id: string
   user_id: string
-  status: 'pending' | 'shipped' | 'delivered'
+  status: 'pending' | 'shipped' | 'delivered' | 'cancelled'
   total: number
   created_at: string
   order_items?: OrderItem[]

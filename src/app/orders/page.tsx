@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Package, ChevronDown, ChevronUp } from 'lucide-react'
+import { Package, ChevronDown, ChevronUp, XCircle } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { supabase, Order } from '@/lib/supabase'
+import { supabase, authedFetch, Order } from '@/lib/supabase'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   shipped: 'bg-blue-100 text-blue-800',
   delivered: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
 }
 
 export default function OrdersPage() {
@@ -19,6 +20,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [cancelling, setCancelling] = useState<string | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -34,6 +36,23 @@ export default function OrdersPage() {
     }
     load()
   }, [user, authLoading, router])
+
+  async function cancelOrder(orderId: string) {
+    if (!confirm('Cancel this order?')) return
+    setCancelling(orderId)
+    const res = await authedFetch('/api/orders', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      alert('Failed to cancel: ' + (err.error ?? res.statusText))
+    } else {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' } : o))
+    }
+    setCancelling(null)
+  }
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
@@ -82,8 +101,18 @@ export default function OrdersPage() {
                     <p className="text-xs text-gray-400 mt-0.5 font-mono">{order.id}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <p className="font-bold text-violet-700 text-lg">₹{order.total.toLocaleString('en-IN')}</p>
+                  {order.status === 'pending' && (
+                    <button
+                      onClick={e => { e.stopPropagation(); cancelOrder(order.id) }}
+                      disabled={cancelling === order.id}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-colors font-medium"
+                    >
+                      <XCircle size={13} />
+                      {cancelling === order.id ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  )}
                   {expanded.has(order.id) ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
                 </div>
               </div>
