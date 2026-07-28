@@ -6,29 +6,61 @@ const SPACE = 'https://yisol-idm-vton.hf.space'
 
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
-// Uses the official IDM-VTON HF Space — completely free
 export async function POST(request: NextRequest) {
   const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const hfToken = process.env.HF_TOKEN
-  if (hfToken) headers['Authorization'] = `Bearer ${hfToken}`
+  const authHeaders: Record<string, string> = {}
+  if (hfToken) authHeaders['Authorization'] = `Bearer ${hfToken}`
 
-  // Step 1: Submit — /call/tryon
-  // First param (dict) is the human image in Imageeditor format
-  // Second param is the garment image (plain URL or base64)
+  // Step 1: Upload the person's photo to the Space's file endpoint
+  // Convert base64 data URL → binary blob
+  const matches = model_image.match(/^data:(.+);base64,(.+)$/)
+  if (!matches) {
+    return NextResponse.json({ error: 'Invalid model_image format' }, { status: 400 })
+  }
+  const mimeType = matches[1]
+  const base64Data = matches[2]
+  const binaryData = Buffer.from(base64Data, 'base64')
+
+  const formData = new FormData()
+  const blob = new Blob([binaryData], { type: mimeType })
+  formData.append('files', blob, 'person.jpg')
+
+  const uploadRes = await fetch(`${SPACE}/upload`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: formData,
+  })
+
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text()
+    return NextResponse.json({ error: 'Upload failed: ' + text }, { status: uploadRes.status })
+  }
+
+  const uploadedPaths: string[] = await uploadRes.json()
+  const personPath = uploadedPaths[0]
+  if (!personPath) {
+    return NextResponse.json({ error: 'No uploaded path returned' }, { status: 500 })
+  }
+  const personUrl = `${SPACE}/file=${personPath}`
+
+  // Step 2: Submit to /call/tryon
   const submitRes = await fetch(`${SPACE}/call/tryon`, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       data: [
-        { background: { path: model_image, url: model_image }, layers: [], composite: null },
+        // human_img — ImageEditor dict with background set to uploaded file
+        { background: { path: personPath, url: personUrl }, layers: [], composite: null },
+        // garm_img — plain URL of the garment
         { path: garment_image, url: garment_image },
+        // garment description
         garment_name ?? 'fashion garment',
-        true,   // is_checked (auto-masking)
+        true,   // is_checked (auto masking)
         false,  // is_checked_crop
         30,     // denoise_steps
         42,     // seed
@@ -46,40 +78,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No event_id returned' }, { status: 500 })
   }
 
-  // Step 2: Poll result stream — /call/tryon/{event_id}
+  // Step 3: Poll SSE result — /call/tryon/{event_id}
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 3000))
 
-    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, { headers })
+    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, {
+      headers: authHeaders,
+    })
     if (!resultRes.ok) continue
 
     const text = await resultRes.text()
 
-    // SSE stream — look for "event: complete" then parse data line
-    if (text.includes('event: complete') || text.includes('event:complete')) {
-      // Extract the data line after the complete event
+    if (text.includes('event: error')) {
+      return NextResponse.json({ error: 'Generation failed — check photo quality and try again' }, { status: 500 })
+    }
+
+    if (text.includes('event: complete')) {
       const lines = text.split('\n')
       for (let j = 0; j < lines.length; j++) {
-        if (lines[j].includes('event: complete') || lines[j].includes('event:complete')) {
-          // next non-empty line should be data:
+        if (lines[j].includes('event: complete')) {
           for (let k = j + 1; k < lines.length; k++) {
             const line = lines[k].trim()
             if (line.startsWith('data:')) {
               try {
                 const parsed = JSON.parse(line.slice(5).trim())
-                // parsed is an array; first element is the output image
                 const first = Array.isArray(parsed) ? parsed[0] : parsed
-                const imageUrl = typeof first === 'string' ? first : (first?.url ?? first?.path)
+                const imageUrl = typeof first === 'string'
+                  ? first
+                  : (first?.url ?? (first?.path ? `${SPACE}/file=${first.path}` : null))
                 if (imageUrl) return NextResponse.json({ image_url: imageUrl })
               } catch { /* keep trying */ }
             }
           }
         }
       }
-    }
-
-    if (text.includes('event: error') || text.includes('event:error')) {
-      return NextResponse.json({ error: 'Generation failed on server' }, { status: 500 })
     }
   }
 
