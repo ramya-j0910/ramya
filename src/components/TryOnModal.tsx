@@ -105,30 +105,35 @@ export default function TryOnModal({ garmentImageUrl, garmentName, onClose }: Tr
                 {/* Person photo */}
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Your Photo</p>
-                  <label className="cursor-pointer block">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    {personPreview ? (
-                      <div className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-violet-300">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={personPreview} alt="Your photo" className="object-cover w-full h-full" />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <p className="text-white text-xs font-medium">Click to change</p>
-                        </div>
+                  {/* Hidden file input — triggered programmatically to avoid flash */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  {personPreview ? (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-violet-300 cursor-pointer"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={personPreview} alt="Your photo" className="object-cover w-full h-full" />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <p className="text-white text-xs font-medium">Click to change</p>
                       </div>
-                    ) : (
-                      <div className="aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 hover:border-violet-400 transition-colors flex flex-col items-center justify-center text-gray-400 hover:text-violet-500">
-                        <Upload size={28} className="mb-2" />
-                        <p className="text-sm font-medium">Upload your photo</p>
-                        <p className="text-xs mt-1">Full body, front-facing</p>
-                      </div>
-                    )}
-                  </label>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 hover:border-violet-400 transition-colors flex flex-col items-center justify-center text-gray-400 hover:text-violet-500 cursor-pointer"
+                    >
+                      <Upload size={28} className="mb-2" />
+                      <p className="text-sm font-medium">Upload your photo</p>
+                      <p className="text-xs mt-1">Full body, front-facing</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Garment */}

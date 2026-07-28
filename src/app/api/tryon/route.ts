@@ -2,79 +2,85 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
+const SPACE = 'https://yisol-idm-vton.hf.space'
+
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
-// Uses the official IDM-VTON Hugging Face Space (free, no API key needed)
+// Uses the official IDM-VTON HF Space — completely free
 export async function POST(request: NextRequest) {
   const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  const HF_TOKEN = process.env.HF_TOKEN ?? ''
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (HF_TOKEN) headers['Authorization'] = `Bearer ${HF_TOKEN}`
+  const hfToken = process.env.HF_TOKEN
+  if (hfToken) headers['Authorization'] = `Bearer ${hfToken}`
 
-  // Step 1: Submit job to the IDM-VTON Gradio Space
-  const submitRes = await fetch(
-    'https://yisol-idm-vton.hf.space/gradio_api/queue/join',
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        data: [
-          { path: garment_image, url: garment_image },   // garm_img
-          { path: model_image, url: model_image },        // human_img
-          garment_name ?? 'fashion garment',              // garment_des
-          true,                                           // is_checked
-          false,                                          // is_checked_crop
-          30,                                             // denoise_steps
-          42,                                             // seed
-        ],
-        event_data: null,
-        fn_index: 0,
-        session_hash: Math.random().toString(36).slice(2),
-      }),
-    }
-  )
+  // Step 1: Submit — /call/tryon
+  // First param (dict) is the human image in Imageeditor format
+  // Second param is the garment image (plain URL or base64)
+  const submitRes = await fetch(`${SPACE}/call/tryon`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      data: [
+        { background: { path: model_image, url: model_image }, layers: [], composite: null },
+        { path: garment_image, url: garment_image },
+        garment_name ?? 'fashion garment',
+        true,   // is_checked (auto-masking)
+        false,  // is_checked_crop
+        30,     // denoise_steps
+        42,     // seed
+      ],
+    }),
+  })
 
   if (!submitRes.ok) {
     const text = await submitRes.text()
-    return NextResponse.json({ error: 'Space submit error: ' + text }, { status: submitRes.status })
+    return NextResponse.json({ error: 'Space error: ' + text }, { status: submitRes.status })
   }
 
   const { event_id } = await submitRes.json()
   if (!event_id) {
-    return NextResponse.json({ error: 'No event_id returned from Space' }, { status: 500 })
+    return NextResponse.json({ error: 'No event_id returned' }, { status: 500 })
   }
 
-  // Step 2: Poll the status endpoint until complete
+  // Step 2: Poll result stream — /call/tryon/{event_id}
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 3000))
 
-    const statusRes = await fetch(
-      `https://yisol-idm-vton.hf.space/gradio_api/queue/status?event_id=${event_id}`,
-      { headers }
-    )
+    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, { headers })
+    if (!resultRes.ok) continue
 
-    if (!statusRes.ok) continue
+    const text = await resultRes.text()
 
-    const statusData = await statusRes.json()
-
-    if (statusData.status === 'COMPLETE') {
-      // output is array; first element is the result image
-      const output = statusData.output?.data?.[0]
-      const imageUrl = typeof output === 'string' ? output : output?.url
-      if (!imageUrl) {
-        return NextResponse.json({ error: 'No output image returned' }, { status: 500 })
+    // SSE stream — look for "event: complete" then parse data line
+    if (text.includes('event: complete') || text.includes('event:complete')) {
+      // Extract the data line after the complete event
+      const lines = text.split('\n')
+      for (let j = 0; j < lines.length; j++) {
+        if (lines[j].includes('event: complete') || lines[j].includes('event:complete')) {
+          // next non-empty line should be data:
+          for (let k = j + 1; k < lines.length; k++) {
+            const line = lines[k].trim()
+            if (line.startsWith('data:')) {
+              try {
+                const parsed = JSON.parse(line.slice(5).trim())
+                // parsed is an array; first element is the output image
+                const first = Array.isArray(parsed) ? parsed[0] : parsed
+                const imageUrl = typeof first === 'string' ? first : (first?.url ?? first?.path)
+                if (imageUrl) return NextResponse.json({ image_url: imageUrl })
+              } catch { /* keep trying */ }
+            }
+          }
+        }
       }
-      return NextResponse.json({ image_url: imageUrl })
     }
 
-    if (statusData.status === 'FAILED') {
-      return NextResponse.json({ error: statusData.error ?? 'Generation failed' }, { status: 500 })
+    if (text.includes('event: error') || text.includes('event:error')) {
+      return NextResponse.json({ error: 'Generation failed on server' }, { status: 500 })
     }
-    // statuses: PENDING, IN_QUEUE, IN_PROGRESS — keep polling
   }
 
   return NextResponse.json({ error: 'Try-on timed out — please try again' }, { status: 504 })
