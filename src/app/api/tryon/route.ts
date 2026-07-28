@@ -52,13 +52,18 @@ export async function POST(request: NextRequest) {
   }
 
   // Step 2: Submit try-on job
+  const meta = { _type: 'gradio.FileData' }
   const submitRes = await fetch(`${SPACE}/call/tryon`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       data: [
-        { background: { path: personPath, url: `${SPACE}/file=${personPath}` }, layers: [], composite: null },
-        { path: garment_image, url: garment_image },
+        {
+          background: { path: personPath, url: `${SPACE}/file=${personPath}`, orig_name: 'person.jpg', meta },
+          layers: [],
+          composite: null,
+        },
+        { path: garment_image, url: garment_image, orig_name: 'garment.jpg', meta },
         garment_name ?? 'fashion garment',
         true,
         false,
@@ -89,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     if (text.includes('event: error')) {
       return NextResponse.json(
-        { error: 'Generation failed — use a clear front-facing full-body photo with plain background' },
+        { error: 'The try-on model could not process these images. Tips: use a clear full-body front-facing photo, plain background, good lighting. Then try again.' },
         { status: 500 }
       )
     }
