@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Heart, ShoppingBag, ArrowLeft } from 'lucide-react'
+import { Heart, ShoppingBag, ArrowLeft, Shirt } from 'lucide-react'
 import { supabase, Product } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import ProductCard from '@/components/ProductCard'
+import TryOnModal from '@/components/TryOnModal'
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,6 +21,7 @@ export default function ProductDetailPage() {
   const [cartLoading, setCartLoading] = useState(false)
   const [wishLoading, setWishLoading] = useState(false)
   const [toast, setToast] = useState('')
+  const [tryOnOpen, setTryOnOpen] = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -188,6 +190,25 @@ export default function ProductDetailPage() {
               {inCart ? 'Add Again' : 'Add to Cart'}
             </button>
           </div>
+
+          {/* Try On button */}
+          {product.image_url && (
+            <button
+              onClick={() => setTryOnOpen(true)}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg border-2 border-violet-400 text-violet-700 font-semibold hover:bg-violet-50 transition-colors"
+            >
+              <Shirt size={18} />
+              👗 Try On Virtually
+            </button>
+          )}
+
+          {tryOnOpen && product.image_url && (
+            <TryOnModal
+              garmentImageUrl={product.image_url}
+              garmentName={product.name}
+              onClose={() => setTryOnOpen(false)}
+            />
+          )}
 
           {inCart && (
             <button
