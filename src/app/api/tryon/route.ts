@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL) }
-// Uses Fashn.ai /run endpoint — returns a result image URL
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.FASHN_API_KEY
-  if (!apiKey) {
+  const token = process.env.REPLICATE_API_TOKEN
+  if (!token) {
     return NextResponse.json({ error: 'Try-on service not configured' }, { status: 503 })
   }
 
@@ -14,53 +15,61 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  // Step 1: Start the prediction
-  const runRes = await fetch('https://api.fashn.ai/v1/run', {
+  // Step 1: Create prediction using fashn/tryon on Replicate
+  const createRes = await fetch('https://api.replicate.com/v1/models/fashn/tryon/predictions', {
     method: 'POST',
     headers: {
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Prefer: 'wait=55',
     },
     body: JSON.stringify({
-      model_image,
-      garment_image,
-      category: 'tops',   // fashn.ai: tops | bottoms | one-pieces
-      mode: 'balanced',
+      input: {
+        model_image,
+        garment_image,
+        category: 'tops',
+      },
     }),
   })
 
-  if (!runRes.ok) {
-    const text = await runRes.text()
-    return NextResponse.json({ error: `Try-on API error: ${text}` }, { status: runRes.status })
+  if (!createRes.ok) {
+    const err = await createRes.text()
+    return NextResponse.json({ error: 'Replicate API error: ' + err }, { status: createRes.status })
   }
 
-  const { id: predictionId } = await runRes.json()
-  if (!predictionId) {
-    return NextResponse.json({ error: 'No prediction ID returned' }, { status: 500 })
+  const prediction = await createRes.json()
+
+  // Replicate may return synchronously if Prefer: wait worked
+  if (prediction.status === 'succeeded') {
+    const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output
+    return NextResponse.json({ image_url: output })
   }
 
-  // Step 2: Poll until completed (max ~60s)
-  for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 2000))
+  if (prediction.status === 'failed' || prediction.error) {
+    return NextResponse.json({ error: prediction.error ?? 'Prediction failed' }, { status: 500 })
+  }
 
-    const statusRes = await fetch(`https://api.fashn.ai/v1/status/${predictionId}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+  // Step 2: Poll until done (max ~50s)
+  const predictionId = prediction.id
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 3000))
+
+    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: { Authorization: `Bearer ${token}` },
     })
 
-    if (!statusRes.ok) continue
+    if (!pollRes.ok) continue
 
-    const statusData = await statusRes.json()
+    const pollData = await pollRes.json()
 
-    if (statusData.status === 'completed') {
-      const output = statusData.output
-      const imageUrl = Array.isArray(output) ? output[0] : output
-      return NextResponse.json({ image_url: imageUrl })
+    if (pollData.status === 'succeeded') {
+      const output = Array.isArray(pollData.output) ? pollData.output[0] : pollData.output
+      return NextResponse.json({ image_url: output })
     }
 
-    if (statusData.status === 'failed') {
-      return NextResponse.json({ error: statusData.error ?? 'Try-on generation failed' }, { status: 500 })
+    if (pollData.status === 'failed') {
+      return NextResponse.json({ error: pollData.error ?? 'Prediction failed' }, { status: 500 })
     }
-    // still processing — keep polling
   }
 
   return NextResponse.json({ error: 'Try-on timed out — please try again' }, { status: 504 })
