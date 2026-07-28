@@ -51,6 +51,7 @@ export default function TryOnModal({ garmentImageUrl, garmentName, onClose }: Tr
         body: JSON.stringify({
           model_image: personBase64,
           garment_image: garmentImageUrl,
+          garment_name: garmentName,
         }),
       })
 

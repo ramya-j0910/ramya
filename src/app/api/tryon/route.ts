@@ -2,21 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
+const MODEL_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985'
+
 // POST /api/tryon
-// Body: { model_image: string (base64 data URL), garment_image: string (URL) }
+// Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
 export async function POST(request: NextRequest) {
   const token = process.env.REPLICATE_API_TOKEN
   if (!token) {
     return NextResponse.json({ error: 'Try-on service not configured' }, { status: 503 })
   }
 
-  const { model_image, garment_image } = await request.json()
+  const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  // Step 1: Create prediction using fashn/tryon on Replicate
-  const createRes = await fetch('https://api.replicate.com/v1/models/fashn/tryon/predictions', {
+  // Step 1: Create prediction using cuuupid/idm-vton
+  const createRes = await fetch('https://api.replicate.com/v1/predictions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -24,10 +26,15 @@ export async function POST(request: NextRequest) {
       Prefer: 'wait=55',
     },
     body: JSON.stringify({
+      version: MODEL_VERSION,
       input: {
-        model_image,
-        garment_image,
-        category: 'tops',
+        human_img: model_image,
+        garm_img: garment_image,
+        garment_des: garment_name ?? 'garment',
+        is_checked: true,
+        is_checked_crop: false,
+        denoise_steps: 30,
+        seed: 42,
       },
     }),
   })
@@ -39,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const prediction = await createRes.json()
 
-  // Replicate may return synchronously if Prefer: wait worked
+  // Replicate returns synchronously if Prefer: wait worked
   if (prediction.status === 'succeeded') {
     const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output
     return NextResponse.json({ image_url: output })
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: prediction.error ?? 'Prediction failed' }, { status: 500 })
   }
 
-  // Step 2: Poll until done (max ~50s)
+  // Step 2: Poll until done (max ~55s)
   const predictionId = prediction.id
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 3000))
