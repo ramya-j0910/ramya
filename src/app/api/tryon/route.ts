@@ -2,81 +2,79 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
-const MODEL_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985'
-
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
+// Uses the official IDM-VTON Hugging Face Space (free, no API key needed)
 export async function POST(request: NextRequest) {
-  const token = process.env.REPLICATE_API_TOKEN
-  if (!token) {
-    return NextResponse.json({ error: 'Try-on service not configured' }, { status: 503 })
-  }
-
   const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  // Step 1: Create prediction using cuuupid/idm-vton
-  const createRes = await fetch('https://api.replicate.com/v1/predictions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'wait=55',
-    },
-    body: JSON.stringify({
-      version: MODEL_VERSION,
-      input: {
-        human_img: model_image,
-        garm_img: garment_image,
-        garment_des: garment_name ?? 'garment',
-        is_checked: true,
-        is_checked_crop: false,
-        denoise_steps: 30,
-        seed: 42,
-      },
-    }),
-  })
+  const HF_TOKEN = process.env.HF_TOKEN ?? ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (HF_TOKEN) headers['Authorization'] = `Bearer ${HF_TOKEN}`
 
-  if (!createRes.ok) {
-    const err = await createRes.text()
-    return NextResponse.json({ error: 'Replicate API error: ' + err }, { status: createRes.status })
+  // Step 1: Submit job to the IDM-VTON Gradio Space
+  const submitRes = await fetch(
+    'https://yisol-idm-vton.hf.space/gradio_api/queue/join',
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        data: [
+          { path: garment_image, url: garment_image },   // garm_img
+          { path: model_image, url: model_image },        // human_img
+          garment_name ?? 'fashion garment',              // garment_des
+          true,                                           // is_checked
+          false,                                          // is_checked_crop
+          30,                                             // denoise_steps
+          42,                                             // seed
+        ],
+        event_data: null,
+        fn_index: 0,
+        session_hash: Math.random().toString(36).slice(2),
+      }),
+    }
+  )
+
+  if (!submitRes.ok) {
+    const text = await submitRes.text()
+    return NextResponse.json({ error: 'Space submit error: ' + text }, { status: submitRes.status })
   }
 
-  const prediction = await createRes.json()
-
-  // Replicate returns synchronously if Prefer: wait worked
-  if (prediction.status === 'succeeded') {
-    const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output
-    return NextResponse.json({ image_url: output })
+  const { event_id } = await submitRes.json()
+  if (!event_id) {
+    return NextResponse.json({ error: 'No event_id returned from Space' }, { status: 500 })
   }
 
-  if (prediction.status === 'failed' || prediction.error) {
-    return NextResponse.json({ error: prediction.error ?? 'Prediction failed' }, { status: 500 })
-  }
-
-  // Step 2: Poll until done (max ~55s)
-  const predictionId = prediction.id
-  for (let i = 0; i < 20; i++) {
+  // Step 2: Poll the status endpoint until complete
+  for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 3000))
 
-    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const statusRes = await fetch(
+      `https://yisol-idm-vton.hf.space/gradio_api/queue/status?event_id=${event_id}`,
+      { headers }
+    )
 
-    if (!pollRes.ok) continue
+    if (!statusRes.ok) continue
 
-    const pollData = await pollRes.json()
+    const statusData = await statusRes.json()
 
-    if (pollData.status === 'succeeded') {
-      const output = Array.isArray(pollData.output) ? pollData.output[0] : pollData.output
-      return NextResponse.json({ image_url: output })
+    if (statusData.status === 'COMPLETE') {
+      // output is array; first element is the result image
+      const output = statusData.output?.data?.[0]
+      const imageUrl = typeof output === 'string' ? output : output?.url
+      if (!imageUrl) {
+        return NextResponse.json({ error: 'No output image returned' }, { status: 500 })
+      }
+      return NextResponse.json({ image_url: imageUrl })
     }
 
-    if (pollData.status === 'failed') {
-      return NextResponse.json({ error: pollData.error ?? 'Prediction failed' }, { status: 500 })
+    if (statusData.status === 'FAILED') {
+      return NextResponse.json({ error: statusData.error ?? 'Generation failed' }, { status: 500 })
     }
+    // statuses: PENDING, IN_QUEUE, IN_PROGRESS — keep polling
   }
 
   return NextResponse.json({ error: 'Try-on timed out — please try again' }, { status: 504 })
