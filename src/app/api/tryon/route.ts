@@ -6,29 +6,33 @@ const SPACE = 'https://yisol-idm-vton.hf.space'
 
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
+// Requires HF_TOKEN env var — free HuggingFace token (huggingface.co/settings/tokens)
 export async function POST(request: NextRequest) {
+  const hfToken = process.env.HF_TOKEN
+  if (!hfToken) {
+    return NextResponse.json(
+      { error: 'HF_TOKEN not configured — see setup instructions' },
+      { status: 503 }
+    )
+  }
+
   const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  const hfToken = process.env.HF_TOKEN
-  const authHeaders: Record<string, string> = {}
-  if (hfToken) authHeaders['Authorization'] = `Bearer ${hfToken}`
+  const authHeaders: Record<string, string> = { Authorization: `Bearer ${hfToken}` }
 
-  // Step 1: Upload the person's photo to the Space's file endpoint
-  // Convert base64 data URL → binary blob
+  // Step 1: Upload person photo as binary to Space /upload endpoint
   const matches = model_image.match(/^data:(.+);base64,(.+)$/)
   if (!matches) {
     return NextResponse.json({ error: 'Invalid model_image format' }, { status: 400 })
   }
   const mimeType = matches[1]
-  const base64Data = matches[2]
-  const binaryData = Buffer.from(base64Data, 'base64')
+  const binaryData = Buffer.from(matches[2], 'base64')
 
   const formData = new FormData()
-  const blob = new Blob([binaryData], { type: mimeType })
-  formData.append('files', blob, 'person.jpg')
+  formData.append('files', new Blob([binaryData], { type: mimeType }), 'person.jpg')
 
   const uploadRes = await fetch(`${SPACE}/upload`, {
     method: 'POST',
@@ -46,24 +50,20 @@ export async function POST(request: NextRequest) {
   if (!personPath) {
     return NextResponse.json({ error: 'No uploaded path returned' }, { status: 500 })
   }
-  const personUrl = `${SPACE}/file=${personPath}`
 
-  // Step 2: Submit to /call/tryon
+  // Step 2: Submit try-on job
   const submitRes = await fetch(`${SPACE}/call/tryon`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       data: [
-        // human_img — ImageEditor dict with background set to uploaded file
-        { background: { path: personPath, url: personUrl }, layers: [], composite: null },
-        // garm_img — plain URL of the garment
+        { background: { path: personPath, url: `${SPACE}/file=${personPath}` }, layers: [], composite: null },
         { path: garment_image, url: garment_image },
-        // garment description
         garment_name ?? 'fashion garment',
-        true,   // is_checked (auto masking)
-        false,  // is_checked_crop
-        30,     // denoise_steps
-        42,     // seed
+        true,
+        false,
+        30,
+        42,
       ],
     }),
   })
@@ -78,19 +78,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No event_id returned' }, { status: 500 })
   }
 
-  // Step 3: Poll SSE result — /call/tryon/{event_id}
+  // Step 3: Poll SSE result
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 3000))
 
-    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, {
-      headers: authHeaders,
-    })
+    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, { headers: authHeaders })
     if (!resultRes.ok) continue
 
     const text = await resultRes.text()
 
     if (text.includes('event: error')) {
-      return NextResponse.json({ error: 'Generation failed — check photo quality and try again' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Generation failed — use a clear front-facing full-body photo with plain background' },
+        { status: 500 }
+      )
     }
 
     if (text.includes('event: complete')) {
