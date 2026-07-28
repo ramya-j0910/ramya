@@ -226,13 +226,53 @@ export default function TryOnModal({ garmentImageUrl, garmentName, onClose }: Tr
 
           {/* Error stage */}
           {stage === 'error' && (
-            <div className="py-12 flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <X size={24} className="text-red-500" />
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                <p className="font-semibold mb-1">⚠️ Free AI limit reached</p>
+                <p>The virtual try-on AI (IDM-VTON) blocks free automated requests. You can still try it for free directly on HuggingFace — takes 1 minute!</p>
               </div>
-              <p className="text-lg font-semibold text-gray-800">Something went wrong</p>
-              <p className="text-sm text-red-500 mt-2 max-w-sm">{errorMsg}</p>
-              <button onClick={reset} className="btn-primary mt-6">Try Again</button>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 text-sm">
+                <p className="font-semibold text-gray-800">👇 How to try it for free:</p>
+                <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                  <li>Click the button below to open the try-on AI</li>
+                  <li>Upload your photo on the left side</li>
+                  <li>Paste the garment image URL on the right side</li>
+                  <li>Click <strong>Run</strong></li>
+                </ol>
+
+                <div className="mt-2">
+                  <p className="text-xs text-gray-500 mb-1">Garment image URL (copy this):</p>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={garmentImageUrl}
+                      className="input text-xs py-1.5 flex-1 bg-white"
+                      onFocus={e => e.target.select()}
+                    />
+                    <button
+                      onClick={() => navigator.clipboard.writeText(garmentImageUrl)}
+                      className="btn-secondary text-xs px-3 py-1.5 flex-shrink-0"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <a
+                  href="https://huggingface.co/spaces/yisol/IDM-VTON"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary flex-1 text-center text-sm py-2.5"
+                >
+                  Open Try-On AI ↗
+                </a>
+                <button onClick={reset} className="btn-secondary flex-1 text-sm">
+                  Go Back
+                </button>
+              </div>
             </div>
           )}
         </div>
