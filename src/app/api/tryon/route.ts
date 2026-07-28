@@ -6,37 +6,32 @@ const SPACE = 'https://yisol-idm-vton.hf.space'
 
 // POST /api/tryon
 // Body: { model_image: string (base64 data URL), garment_image: string (URL), garment_name: string }
-// Requires HF_TOKEN env var — free HuggingFace token (huggingface.co/settings/tokens)
 export async function POST(request: NextRequest) {
-  const hfToken = process.env.HF_TOKEN
-  if (!hfToken) {
-    return NextResponse.json(
-      { error: 'HF_TOKEN not configured — see setup instructions' },
-      { status: 503 }
-    )
-  }
-
   const { model_image, garment_image, garment_name } = await request.json()
   if (!model_image || !garment_image) {
     return NextResponse.json({ error: 'Missing model_image or garment_image' }, { status: 400 })
   }
 
-  const authHeaders: Record<string, string> = { Authorization: `Bearer ${hfToken}` }
+  const hfToken = process.env.HF_TOKEN
+  const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (hfToken) authHeaders['Authorization'] = `Bearer ${hfToken}`
 
-  // Step 1: Upload person photo as binary to Space /upload endpoint
+  // Step 1: Upload person photo
   const matches = model_image.match(/^data:(.+);base64,(.+)$/)
   if (!matches) {
     return NextResponse.json({ error: 'Invalid model_image format' }, { status: 400 })
   }
   const mimeType = matches[1]
   const binaryData = Buffer.from(matches[2], 'base64')
-
   const formData = new FormData()
   formData.append('files', new Blob([binaryData], { type: mimeType }), 'person.jpg')
 
+  const uploadHeaders: Record<string, string> = {}
+  if (hfToken) uploadHeaders['Authorization'] = `Bearer ${hfToken}`
+
   const uploadRes = await fetch(`${SPACE}/upload`, {
     method: 'POST',
-    headers: authHeaders,
+    headers: uploadHeaders,
     body: formData,
   })
 
@@ -51,11 +46,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No uploaded path returned' }, { status: 500 })
   }
 
-  // Step 2: Submit try-on job
+  // Step 2: Submit job
   const meta = { _type: 'gradio.FileData' }
   const submitRes = await fetch(`${SPACE}/call/tryon`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: authHeaders,
     body: JSON.stringify({
       data: [
         {
@@ -65,8 +60,8 @@ export async function POST(request: NextRequest) {
         },
         { path: garment_image, url: garment_image, orig_name: 'garment.jpg', meta },
         garment_name ?? 'fashion garment',
-        true,   // is_checked — auto-mask the person
-        true,   // is_checked_crop — auto-crop garment even if worn by model
+        true,
+        true,
         30,
         42,
       ],
@@ -87,15 +82,17 @@ export async function POST(request: NextRequest) {
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 3000))
 
-    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, { headers: authHeaders })
+    const resultRes = await fetch(`${SPACE}/call/tryon/${event_id}`, { headers: uploadHeaders })
     if (!resultRes.ok) continue
 
     const text = await resultRes.text()
 
     if (text.includes('event: error')) {
+      // ZeroGPU spaces block programmatic API calls without a PRO HF account.
+      // Return the garment_image URL as a fallback so the UI can still show something.
       return NextResponse.json(
-        { error: 'The try-on model could not process these images. Tips: use a clear full-body front-facing photo, plain background, good lighting. Then try again.' },
-        { status: 500 }
+        { error: 'ZEROGPU_BLOCKED', garment_url: garment_image },
+        { status: 403 }
       )
     }
 

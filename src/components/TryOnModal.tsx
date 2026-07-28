@@ -57,6 +57,14 @@ export default function TryOnModal({ garmentImageUrl, garmentName, onClose }: Tr
 
       const data = await res.json()
 
+      // ZeroGPU space blocks free API calls — open the space directly for the user
+      if (res.status === 403 && data.error === 'ZEROGPU_BLOCKED') {
+        window.open('https://huggingface.co/spaces/yisol/IDM-VTON', '_blank')
+        setErrorMsg('The free try-on AI requires you to run it directly on HuggingFace. We\'ve opened the page for you — upload your photo and the garment image there.')
+        setStage('error')
+        return
+      }
+
       if (!res.ok || data.error) {
         setErrorMsg(data.error ?? 'Something went wrong. Please try again.')
         setStage('error')
