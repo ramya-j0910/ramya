@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
         },
         { path: garment_image, url: garment_image, orig_name: 'garment.jpg', meta },
         garment_name ?? 'fashion garment',
-        true,
-        false,
+        true,   // is_checked — auto-mask the person
+        true,   // is_checked_crop — auto-crop garment even if worn by model
         30,
         42,
       ],
